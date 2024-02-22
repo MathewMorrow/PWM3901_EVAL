@@ -14,7 +14,7 @@
 
 #define PMW_REG_PRODUCTID 0x00
 #define PMW_REG_REVISIONID 0x01
-#define PWM_REG_MOON 0x02
+#define PWM_REG_MOTION 0x02
 #define PMW_REG_DELTA_X_L 0x03
 #define PMW_REG_DELTA_X_H 0x04
 #define PMW_REG_DELTA_Y_L 0x05
@@ -34,6 +34,24 @@
 #define PMW_REG_INVERSE_PRODUCT_ID 0x5F
 
 #define PMW_CHIP_ID 0x49
+
+/* Structure to hold register data */
+typedef struct{
+
+	/* Filter coefficients */
+	float alpha;
+	float beta;
+	float sampleTime_s;
+	/* Input array */
+	float x[3];
+	/* Output array */
+	float y[3];
+	/* Filter output */
+	float out;
+
+} PMW3901_t;
+
+
 
 
 #endif /* INC_PMW3901_H_ */
