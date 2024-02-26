@@ -267,7 +267,10 @@ void PMW3901_SetInterrupt()
 
 
 
+void PMW3901_ReadMotionBulk()
+{
 
+}
 
 
 

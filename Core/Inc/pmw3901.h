@@ -36,20 +36,49 @@
 #define PMW_CHIP_ID 0x49
 
 /* Structure to hold register data */
-typedef struct{
+typedef struct {
 
-	/* Filter coefficients */
-	float alpha;
-	float beta;
-	float sampleTime_s;
-	/* Input array */
-	float x[3];
-	/* Output array */
-	float y[3];
-	/* Filter output */
-	float out;
+	uint16_t deltaX;
+	uint16_t deltaY;
+	uint8_t squal;
+	uint16_t shuttderData;
+
+	uint8_t isValid;
+	float xDisplacement;
+	float yDisplacement;
+	float xVelocity;
+	float yVelocity;
 
 } PMW3901_t;
+
+PWM3901_t pmw3901;
+
+
+typedef struct motionBurst_s {
+  union {
+    uint8_t motion;
+    struct {
+      uint8_t frameFrom0    : 1;
+      uint8_t runMode       : 2;
+      uint8_t reserved1     : 1;
+      uint8_t rawFrom0      : 1;
+      uint8_t reserved2     : 2;
+      uint8_t motionOccurred: 1;
+    };
+  };
+
+  uint8_t observation;
+  int16_t deltaX;
+  int16_t deltaY;
+
+  uint8_t squal;
+
+  uint8_t rawDataSum;
+  uint8_t maxRawData;
+  uint8_t minRawData;
+
+  uint16_t shutter;
+} __attribute__((packed)) motionBurst_t;
 
 
 
