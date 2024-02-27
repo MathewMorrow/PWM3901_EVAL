@@ -55,7 +55,7 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-
+extern UART_HandleTypeDef huart2;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -197,6 +197,31 @@ void SysTick_Handler(void)
 /* For the available peripheral interrupt handler names,                      */
 /* please refer to the startup file (startup_stm32f4xx.s).                    */
 /******************************************************************************/
+
+/**
+  * @brief This function handles USART2 global interrupt.
+  */
+void USART2_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART2_IRQn 0 */
+
+	/* USER CODE BEGIN USART2_IRQn 0 */
+	uint32_t Flag = __HAL_UART_GET_FLAG(&huart2, UART_FLAG_RXNE);
+	//uint32_t IT_Source = __HAL_UART_GET_IT_SOURCE(&huart2, UART_FLAG_RXNE); // NOT WORKING?
+
+	//if((Flag != RESET) && (IT_Source != RESET)) // NOT WORKING?
+	if((Flag != RESET))
+	{
+		usart_Receive_ISR(&huart2);
+		return;
+	}
+
+  /* USER CODE END USART2_IRQn 0 */
+  HAL_UART_IRQHandler(&huart2);
+  /* USER CODE BEGIN USART2_IRQn 1 */
+
+  /* USER CODE END USART2_IRQn 1 */
+}
 
 /* USER CODE BEGIN 1 */
 

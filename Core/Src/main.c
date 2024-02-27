@@ -21,6 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "micros.h"
+#include "pmw3901.h"
 
 /* USER CODE END Includes */
 
@@ -32,6 +34,17 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
+#define BYTE_TO_BINARY(byte)  \
+  ((byte) & 0x80 ? '1' : '0'), \
+  ((byte) & 0x40 ? '1' : '0'), \
+  ((byte) & 0x20 ? '1' : '0'), \
+  ((byte) & 0x10 ? '1' : '0'), \
+  ((byte) & 0x08 ? '1' : '0'), \
+  ((byte) & 0x04 ? '1' : '0'), \
+  ((byte) & 0x02 ? '1' : '0'), \
+  ((byte) & 0x01 ? '1' : '0')
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -42,9 +55,15 @@
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
 
+TIM_HandleTypeDef htim5;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+
+uint8_t sprintfBuffer[512] = {'\0'};
+uint8_t runPMW = 0;
+uint8_t streamPMW = 0;
 
 /* USER CODE END PV */
 
@@ -53,7 +72,10 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
+void printCLI(void);
+void streamData();
 
 /* USER CODE END PFP */
 
@@ -92,7 +114,9 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_SPI1_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
+  microsInit(&htim5);
 
   /* USER CODE END 2 */
 
@@ -100,6 +124,16 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+	if(runPMW && PMW3901_IsDataReady())
+	{
+		PMW3901_ReadMotion();
+		PMW3901_ReadMotionBulk();
+	}
+
+	if(getRxCount(&huart2)) printCLI();
+	streamData();
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -193,6 +227,51 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief TIM5 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM5_Init(void)
+{
+
+  /* USER CODE BEGIN TIM5_Init 0 */
+
+  /* USER CODE END TIM5_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM5_Init 1 */
+
+  /* USER CODE END TIM5_Init 1 */
+  htim5.Instance = TIM5;
+  htim5.Init.Prescaler = 84-1;
+  htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim5.Init.Period = 4294967295;
+  htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim5, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim5, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM5_Init 2 */
+
+  /* USER CODE END TIM5_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -269,6 +348,111 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void printCLI(void)
+{
+	char read_Value = usart_Read(&huart2);
+	printf("%c\n\r", read_Value);
+
+	if(read_Value == 'h')
+	{
+		sprintf(sprintfBuffer,"\n\r"
+				"1 - Init\n\r"
+				"3 - Slow Read\n\r"
+				"4 - Bulk Read\n\r"
+				"5 - Stream\n\r"
+				"9 - Power On Reset\n\r"
+				);
+		HAL_UART_Transmit_IT(&huart2, sprintfBuffer, strlen(sprintfBuffer));
+	}
+	else if(read_Value == '1')
+	{
+		PMW3901_ReadMotion();
+	}
+	else if(read_Value == '3')
+	{
+		PMW3901_init(&hspi1, PIN_CS_GPIO_Port, PIN_CS_Pin, PIN_INTERRUPT_GPIO_Port, PIN_INTERRUPT_Pin);
+		sprintf("\n\r"
+				"Motion: "BYTE_TO_BINARY_PATTERN "\n\r"
+				"deltax: \n\r"
+				"deltay: \n\r"
+				"Squal: \n\r"
+				,BYTE_TO_BINARY(pmw3901.motion)
+				, pmw3901.deltaX
+				, pmw3901.deltaY
+				, pmw3901.squal);
+	}
+	else if(read_Value == '4')
+	{
+		PMW3901_init(&hspi1, PIN_CS_GPIO_Port, PIN_CS_Pin, PIN_INTERRUPT_GPIO_Port, PIN_INTERRUPT_Pin);
+		sprintf("\n\r"
+				"Valid: \n\r"
+				"deltax: \n\r"
+				"deltay: \n\r"
+				"Squal: \n\r"
+				"Observ: \n\r"
+				"Rawavg: \n\r"
+				"RawMx: \n\r"
+				"RawMn: \n\r"
+				"Shutter: \n\r"
+				,pmw3901.isValid
+				, pmw3901.deltaX
+				, pmw3901.deltaY
+				, pmw3901.squal
+				,pmw3901.observation
+				,pmw3901.rawAverage
+				,pmw3901.rawMax
+				,pmw3901.rawMin
+				,pmw3901.shutter
+				,pmw3901.squal
+				);
+	}
+	else if (read_Value = '5')
+	{
+		uint8_t runPMW = 1;
+		uint8_t streamPMW = 1;
+	}
+	else if(read_Value = '9')
+	{
+		PMW3901_PowerOnReset();
+	}
+	else
+	{
+		sprintf(sprintfBuffer, "Invalid Command\n\r");
+		HAL_UART_Transmit_IT(&huart2, sprintfBuffer, strlen(sprintfBuffer));
+	}
+
+	printf("END\n\r");
+}
+
+void streamData()
+{
+	if(streamPMW)
+	{
+		static uint32_t lastMillis = 0;
+		if(HAL_GetTick() - lastMillis >= 5)
+		{
+			lastMillis = HAL_GetTick();
+			sprintf(sprintfBuffer, "%i %i %i\n\r", pmw3901.deltaX, pmw3901.deltaY, pmw3901.squal);
+			HAL_UART_Transmit_IT(&huart2, sprintfBuffer, strlen(sprintfBuffer));
+		}
+	}
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+//	if(huart = &huart2)
+//	{
+//		for(int i = 0; i<512; i++)
+//		{
+//			sprintfBuffer[i] = '\0';
+//		}
+//	}
+	for(int i = 0; i<512; i++)
+	{
+		sprintfBuffer[i] = '\0';
+	}
+}
 
 /* USER CODE END 4 */
 

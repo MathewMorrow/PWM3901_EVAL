@@ -3,11 +3,16 @@
  *
  *  Created on: Feb 20, 2024
  *      Author: mat-m
+ *
+ *      https://github.com/siuisa/pmw3901mb/blob/master/src/driver_pmw3901mb.c#L406
+ *
+ *      https://github.com/PX4/PX4-Autopilot/blob/main/src/drivers/optical_flow/pmw3901/PMW3901.cpp#L356
  */
 
 #include "pmw3901.h"
 #include "stm32f4xx_hal.h"
 #include "stdint.h"
+#include "micros.h"
 
 /* SPI Peripherals */
 SPI_HandleTypeDef *spi_pmw;
@@ -24,6 +29,8 @@ uint16_t int_pin_pmw;
 #define SPI_TIMEOUT 1000
 uint8_t NOP_MASK = 0x00;
 
+PMW3901_t pmw3901 = {0};
+
 
 uint8_t PMW3901_readRegs(uint8_t reg, uint32_t *data, uint16_t len)
 {
@@ -37,7 +44,7 @@ uint8_t PMW3901_readRegs(uint8_t reg, uint32_t *data, uint16_t len)
 	HAL_Error = HAL_SPI_TransmitReceive(spi_pmw, &NOP_MASK, data, len, SPI_TIMEOUT);
 	HAL_GPIO_WritePin(cs_port_pmw , cs_pin_pmw, GPIO_PIN_SET);
 
-	if(HAL_Error){ BMI2_processSPIErrors(HAL_Error);}
+//	if(HAL_Error){ BMI2_processSPIErrors(HAL_Error);}
 	return HAL_Error;
 }
 
@@ -51,7 +58,7 @@ uint8_t PMW3901_writeReg(uint8_t reg, uint8_t value)
 	HAL_GPIO_WritePin(cs_port_pmw , cs_pin_pmw, GPIO_PIN_SET);
 	HAL_Delay(1);
 
-	if(HAL_Error){ BMI2_processSPIErrors(HAL_Error);}
+//	if(HAL_Error){ BMI2_processSPIErrors(HAL_Error);}
 	return HAL_Error;
 }
 
@@ -67,7 +74,7 @@ uint8_t PMW3901_writeMultiple(uint8_t reg, uint8_t *data, uint16_t len)
 	HAL_GPIO_WritePin(cs_port_pmw , cs_pin_pmw, GPIO_PIN_SET);
 	HAL_Delay(1);
 
-	if(HAL_Error){ BMI2_processSPIErrors(HAL_Error);}
+//	if(HAL_Error){ BMI2_processSPIErrors(HAL_Error);}
 	return HAL_Error;
 }
 
@@ -82,10 +89,12 @@ uint8_t PMW3901_init(SPI_HandleTypeDef *spi_handle, GPIO_TypeDef *CS_GPIO_Port, 
 	int_port_pmw = INT_GPIO_Port;
 	int_pin_pmw = INT_Pin;
 
+
+	/* Toggle SPI pins to enable SPI bus on device */
 	HAL_GPIO_WritePin(cs_port_pmw, cs_pin_pmw, GPIO_PIN_SET);
-	HAL_Delay(1);
+	delayMicros(50);
 	HAL_GPIO_WritePin(cs_port_pmw, cs_pin_pmw, GPIO_PIN_RESET);
-	HAL_Delay(1);
+	delayMicros(50);
 	HAL_GPIO_WritePin(cs_port_pmw, cs_pin_pmw, GPIO_PIN_SET);
 
 	/* Wait at least 40ms from power up */
@@ -107,9 +116,11 @@ uint8_t PMW3901_init(SPI_HandleTypeDef *spi_handle, GPIO_TypeDef *CS_GPIO_Port, 
 	PMW3901_readRegs(0x04, &dummyRead, 1);
 	PMW3901_readRegs(0x05, &dummyRead, 1);
 	PMW3901_readRegs(0x06, &dummyRead, 1);
-	delay(1);
+	HAL_Delay(1);
 
 	PMW3901_WriteConfiguration();
+
+	PMW3901_SetInterrupt();
 
 	return 0;
 }
@@ -262,14 +273,73 @@ void PMW3901_SetInterrupt()
 	/* Set MOTION_CONTROL reg (0x0F) to configure pin polarity? */
 	/* ChatGPT says Bit-2 to 0 for active high, bit-1 to 0 for clear on read of MOTION reg */
 	/* All other regs are reserved */
-	PPMW3901_writeReg(0x0F, 0x00);
+//	PPMW3901_writeReg(0x0F, 0x00);
+}
+
+uint8_t PMW3901_IsDataReady()
+{
+	return HAL_GPIO_ReadPin(int_port_pmw, int_pin_pmw);
 }
 
 
-
-void PMW3901_ReadMotionBulk()
+uint8_t PMW3901_ReadMotion()
 {
+	uint8_t rslt = 0;
+	uint8_t data[6] = {0};
 
+	for(int i = 0; i<6; i++)
+	{
+		rslt += PMW3901_readRegs(PWM_REG_MOTION, data[i], 1);
+	}
+
+	if(rslt == 0)
+	{
+		pmw3901.motion = data[0];
+		pmw3901.deltaX = ((int16_t)data[2] << 8) | data[1];
+		pmw3901.deltaY = ((int16_t)data[4] << 8) | data[3];
+		pmw3901.squal = data[5];
+	}
+
+	return rslt;
+}
+
+
+uint8_t  PMW3901_ReadMotionBulk()
+{
+	uint8_t rslt = 0;
+	uint8_t data[12] = {0};
+
+	rslt = PMW3901_readRegs(PMW_REG_MOTION_BURST, data[0], 12);
+
+	if(rslt == 0)
+	{
+		if(data[0] && (1 << 7))
+		{
+			if( (data[6] < 0x19) || (data[10] == 0x1F) )
+			{
+				pmw3901.isValid = 0;
+			}
+			else
+			{
+				pmw3901.isValid = 1;
+				pmw3901.deltaX = (int16_t)(((uint16_t)data[3] << 8) | data[2]);                /* set delta_x */
+				pmw3901.deltaY = (int16_t)(((uint16_t)data[5] << 8) | data[4]);                /* set delta_y */
+				pmw3901.observation = data[1] & 0x3F;                                                  /* set observation */
+				pmw3901.rawAverage = data[7];                                                         /* set raw average */
+				pmw3901.rawMax = data[8];                                                             /* set raw max */
+				pmw3901.rawMin = data[9];                                                             /* set raw min */
+				pmw3901.shutter = (((((uint16_t)data[10] & 0x1F) << 8)) | data[11]);            /* set shutter */
+//				pmw3901.squal = data[6] * 4;
+				pmw3901.squal = data[6];
+			}
+		}
+	}
+	else
+	{
+		pmw3901.isValid = 0;
+	}
+
+	return rslt;
 }
 
 

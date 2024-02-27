@@ -26,7 +26,7 @@
 #define PMW_REG_SHUER_LOWER 0x0B
 #define PMW_REG_SHUER_UPPER 0x0C
 #define PMW_REG_OBSERVATION 0x15
-#define PMW_REG_MOON_BURST 0x016
+#define PMW_REG_MOTION_BURST 0x016
 #define PMW_REG_POWER_UP_RESET 0x3A
 #define PMW_REG_SHUTDOWN 0x3B
 #define PMW_REG_RAW_DATA_GRAB 0x58
@@ -36,12 +36,18 @@
 #define PMW_CHIP_ID 0x49
 
 /* Structure to hold register data */
-typedef struct {
+typedef struct PMW3901_s{
 
-	uint16_t deltaX;
-	uint16_t deltaY;
+	uint16_t motion;
+	int16_t deltaX;
+	int16_t deltaY;
 	uint8_t squal;
 	uint16_t shuttderData;
+	uint8_t observation;
+	uint8_t rawAverage;
+	uint8_t rawMax;
+	uint8_t rawMin;
+	uint16_t shutter;
 
 	uint8_t isValid;
 	float xDisplacement;
@@ -51,7 +57,7 @@ typedef struct {
 
 } PMW3901_t;
 
-PWM3901_t pmw3901;
+extern PMW3901_t pmw3901;
 
 
 typedef struct motionBurst_s {
@@ -80,7 +86,28 @@ typedef struct motionBurst_s {
   uint16_t shutter;
 } __attribute__((packed)) motionBurst_t;
 
+uint8_t PMW3901_readRegs(uint8_t reg, uint32_t *data, uint16_t len);
 
+uint8_t PMW3901_writeReg(uint8_t reg, uint8_t value);
+
+uint8_t PMW3901_writeMultiple(uint8_t reg, uint8_t *data, uint16_t len);
+
+
+uint8_t PMW3901_init(SPI_HandleTypeDef *spi_handle, GPIO_TypeDef *CS_GPIO_Port, uint16_t CS_Pin, GPIO_TypeDef *INT_GPIO_Port, uint16_t INT_Pin);
+
+uint8_t PMW3901_PowerOnReset();
+
+uint8_t PMW3901_WriteConfiguration();
+
+void PMW3901_SetInterrupt();
+
+uint8_t PMW3901_IsDataReady();
+
+
+uint8_t PMW3901_ReadMotion();
+
+
+uint8_t  PMW3901_ReadMotionBulk();
 
 
 #endif /* INC_PMW3901_H_ */
