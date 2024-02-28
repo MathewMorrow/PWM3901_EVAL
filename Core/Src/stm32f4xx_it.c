@@ -205,7 +205,6 @@ void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
 
-	/* USER CODE BEGIN USART2_IRQn 0 */
 	uint32_t Flag = __HAL_UART_GET_FLAG(&huart2, UART_FLAG_RXNE);
 	//uint32_t IT_Source = __HAL_UART_GET_IT_SOURCE(&huart2, UART_FLAG_RXNE); // NOT WORKING?
 

@@ -25,7 +25,7 @@ GPIO_TypeDef *int_port_pmw;
 uint16_t int_pin_pmw;
 
 /* SPI const and defs */
-#define READ_MASK 0b10000000
+#define WRITE_MASK 0b10000000
 #define SPI_TIMEOUT 1000
 uint8_t NOP_MASK = 0x00;
 
@@ -35,7 +35,7 @@ PMW3901_t pmw3901 = {0};
 uint8_t PMW3901_readRegs(uint8_t reg, uint32_t *data, uint16_t len)
 {
 	uint8_t HAL_Error = 0;
-	uint8_t regReadMask = (READ_MASK | reg);
+	uint8_t regReadMask = reg;
 	uint8_t dummy = 0;
 
 	HAL_GPIO_WritePin(cs_port_pmw , cs_pin_pmw, GPIO_PIN_RESET);
@@ -51,7 +51,7 @@ uint8_t PMW3901_readRegs(uint8_t reg, uint32_t *data, uint16_t len)
 uint8_t PMW3901_writeReg(uint8_t reg, uint8_t value)
 {
 	uint8_t HAL_Error = 0;
-	uint8_t regWriteMask[2] = {(0x00 | reg) ,  value };
+	uint8_t regWriteMask[2] = {(WRITE_MASK | reg) ,  value };
 
 	HAL_GPIO_WritePin(cs_port_pmw , cs_pin_pmw, GPIO_PIN_RESET);
 	HAL_Error = HAL_SPI_Transmit(spi_pmw, regWriteMask, 2, SPI_TIMEOUT);
@@ -130,140 +130,140 @@ uint8_t PMW3901_PowerOnReset()
 	PMW3901_writeReg(0x3A, 0x5A);
 }
 
-uint8_t PMW3901_WriteConfiguration()
-{
-	// set performance optimization registers
-	// from PixArt PMW3901MB Optical Motion Tracking chip demo kit V3.20 (21 Aug 2018)
-	unsigned char v = 0;
-	unsigned char c1 = 0;
-	unsigned char c2 = 0;
-
-	PMW3901_writeReg(0x7F, 0x00);
-	PMW3901_writeReg(0x55, 0x01);
-	PMW3901_writeReg(0x50, 0x07);
-	PMW3901_writeReg(0x7f, 0x0e);
-	PMW3901_writeReg(0x43, 0x10);
-
-	PMW3901_readRegs(0x67, &v, 1);
-
-	// if bit7 is set
-	if (v & (1 << 7)) {
-		PMW3901_writeReg(0x48, 0x04);
-
-	} else {
-		PMW3901_writeReg(0x48, 0x02);
-	}
-
-	PMW3901_writeReg(0x7F, 0x00);
-	PMW3901_writeReg(0x51, 0x7b);
-	PMW3901_writeReg(0x50, 0x00);
-	PMW3901_writeReg(0x55, 0x00);
-
-	PMW3901_writeReg(0x7F, 0x0e);
-	PMW3901_readRegs(0x73, &v, 1);
-
-	if (v == 0) {
-		PMW3901_readRegs(0x70, &c1, 1);
-
-		if (c1 <= 28) {
-			c1 = c1 + 14;
-
-		} else {
-			c1 = c1 + 11;
-		}
-
-		if (c1 > 0x3F) {
-			c1 = 0x3F;
-		}
-
-		PMW3901_readRegs(0x71, &c2, 1);
-		c2 = ((unsigned short)c2 * 45) / 100;
-
-		PMW3901_writeReg(0x7f, 0x00);
-		PMW3901_writeReg(0x61, 0xAD);
-		PMW3901_writeReg(0x51, 0x70);
-		PMW3901_writeReg(0x7f, 0x0e);
-		PMW3901_writeReg(0x70, c1);
-		PMW3901_writeReg(0x71, c2);
-	}
-
-	PMW3901_writeReg(0x7F, 0x00);
-	PMW3901_writeReg(0x61, 0xAD);
-	PMW3901_writeReg(0x7F, 0x03);
-	PMW3901_writeReg(0x40, 0x00);
-	PMW3901_writeReg(0x7F, 0x05);
-	PMW3901_writeReg(0x41, 0xB3);
-	PMW3901_writeReg(0x43, 0xF1);
-	PMW3901_writeReg(0x45, 0x14);
-	PMW3901_writeReg(0x5B, 0x32);
-	PMW3901_writeReg(0x5F, 0x34);
-	PMW3901_writeReg(0x7B, 0x08);
-	PMW3901_writeReg(0x7F, 0x06);
-	PMW3901_writeReg(0x44, 0x1B);
-	PMW3901_writeReg(0x40, 0xBF);
-	PMW3901_writeReg(0x4E, 0x3F);
-	PMW3901_writeReg(0x7F, 0x08);
-	PMW3901_writeReg(0x65, 0x20);
-	PMW3901_writeReg(0x6A, 0x18);
-	PMW3901_writeReg(0x7F, 0x09);
-	PMW3901_writeReg(0x4F, 0xAF);
-	PMW3901_writeReg(0x5F, 0x40);
-	PMW3901_writeReg(0x48, 0x80);
-	PMW3901_writeReg(0x49, 0x80);
-	PMW3901_writeReg(0x57, 0x77);
-	PMW3901_writeReg(0x60, 0x78);
-	PMW3901_writeReg(0x61, 0x78);
-	PMW3901_writeReg(0x62, 0x08);
-	PMW3901_writeReg(0x63, 0x50);
-	PMW3901_writeReg(0x7F, 0x0A);
-	PMW3901_writeReg(0x45, 0x60);
-	PMW3901_writeReg(0x7F, 0x00);
-	PMW3901_writeReg(0x4D, 0x11);
-	PMW3901_writeReg(0x55, 0x80);
-	PMW3901_writeReg(0x74, 0x21);
-	PMW3901_writeReg(0x75, 0x1F);
-	PMW3901_writeReg(0x4A, 0x78);
-	PMW3901_writeReg(0x4B, 0x78);
-	PMW3901_writeReg(0x44, 0x08);
-	PMW3901_writeReg(0x45, 0x50);
-	PMW3901_writeReg(0x64, 0xFF);
-	PMW3901_writeReg(0x65, 0x1F);
-	PMW3901_writeReg(0x7F, 0x14);
-	PMW3901_writeReg(0x65, 0x67);
-	PMW3901_writeReg(0x66, 0x08);
-	PMW3901_writeReg(0x63, 0x70);
-	PMW3901_writeReg(0x7F, 0x15);
-	PMW3901_writeReg(0x48, 0x48);
-	PMW3901_writeReg(0x7F, 0x07);
-	PMW3901_writeReg(0x41, 0x0D);
-	PMW3901_writeReg(0x43, 0x14);
-	PMW3901_writeReg(0x4B, 0x0E);
-	PMW3901_writeReg(0x45, 0x0F);
-	PMW3901_writeReg(0x44, 0x42);
-	PMW3901_writeReg(0x4C, 0x80);
-	PMW3901_writeReg(0x7F, 0x10);
-	PMW3901_writeReg(0x5B, 0x02);
-	PMW3901_writeReg(0x7F, 0x07);
-	PMW3901_writeReg(0x40, 0x41);
-	PMW3901_writeReg(0x70, 0x00);
-
-	HAL_Delay(10); // delay 10ms
-
-	PMW3901_writeReg(0x32, 0x44);
-	PMW3901_writeReg(0x7F, 0x07);
-	PMW3901_writeReg(0x40, 0x40);
-	PMW3901_writeReg(0x7F, 0x06);
-	PMW3901_writeReg(0x62, 0xF0);
-	PMW3901_writeReg(0x63, 0x00);
-	PMW3901_writeReg(0x7F, 0x0D);
-	PMW3901_writeReg(0x48, 0xC0);
-	PMW3901_writeReg(0x6F, 0xD5);
-	PMW3901_writeReg(0x7F, 0x00);
-	PMW3901_writeReg(0x5B, 0xA0);
-	PMW3901_writeReg(0x4E, 0xA8);
-	PMW3901_writeReg(0x5A, 0x50);
-	PMW3901_writeReg(0x40, 0x80);
-}
+//uint8_t PMW3901_WriteConfiguration()
+//{
+//	// set performance optimization registers
+//	// from PixArt PMW3901MB Optical Motion Tracking chip demo kit V3.20 (21 Aug 2018)
+//	unsigned char v = 0;
+//	unsigned char c1 = 0;
+//	unsigned char c2 = 0;
+//
+//	PMW3901_writeReg(0x7F, 0x00);
+//	PMW3901_writeReg(0x55, 0x01);
+//	PMW3901_writeReg(0x50, 0x07);
+//	PMW3901_writeReg(0x7f, 0x0e);
+//	PMW3901_writeReg(0x43, 0x10);
+//
+//	PMW3901_readRegs(0x67, &v, 1);
+//
+//	// if bit7 is set
+//	if (v & (1 << 7)) {
+//		PMW3901_writeReg(0x48, 0x04);
+//
+//	} else {
+//		PMW3901_writeReg(0x48, 0x02);
+//	}
+//
+//	PMW3901_writeReg(0x7F, 0x00);
+//	PMW3901_writeReg(0x51, 0x7b);
+//	PMW3901_writeReg(0x50, 0x00);
+//	PMW3901_writeReg(0x55, 0x00);
+//
+//	PMW3901_writeReg(0x7F, 0x0e);
+//	PMW3901_readRegs(0x73, &v, 1);
+//
+//	if (v == 0) {
+//		PMW3901_readRegs(0x70, &c1, 1);
+//
+//		if (c1 <= 28) {
+//			c1 = c1 + 14;
+//
+//		} else {
+//			c1 = c1 + 11;
+//		}
+//
+//		if (c1 > 0x3F) {
+//			c1 = 0x3F;
+//		}
+//
+//		PMW3901_readRegs(0x71, &c2, 1);
+//		c2 = ((unsigned short)c2 * 45) / 100;
+//
+//		PMW3901_writeReg(0x7f, 0x00);
+//		PMW3901_writeReg(0x61, 0xAD);
+//		PMW3901_writeReg(0x51, 0x70);
+//		PMW3901_writeReg(0x7f, 0x0e);
+//		PMW3901_writeReg(0x70, c1);
+//		PMW3901_writeReg(0x71, c2);
+//	}
+//
+//	PMW3901_writeReg(0x7F, 0x00);
+//	PMW3901_writeReg(0x61, 0xAD);
+//	PMW3901_writeReg(0x7F, 0x03);
+//	PMW3901_writeReg(0x40, 0x00);
+//	PMW3901_writeReg(0x7F, 0x05);
+//	PMW3901_writeReg(0x41, 0xB3);
+//	PMW3901_writeReg(0x43, 0xF1);
+//	PMW3901_writeReg(0x45, 0x14);
+//	PMW3901_writeReg(0x5B, 0x32);
+//	PMW3901_writeReg(0x5F, 0x34);
+//	PMW3901_writeReg(0x7B, 0x08);
+//	PMW3901_writeReg(0x7F, 0x06);
+//	PMW3901_writeReg(0x44, 0x1B);
+//	PMW3901_writeReg(0x40, 0xBF);
+//	PMW3901_writeReg(0x4E, 0x3F);
+//	PMW3901_writeReg(0x7F, 0x08);
+//	PMW3901_writeReg(0x65, 0x20);
+//	PMW3901_writeReg(0x6A, 0x18);
+//	PMW3901_writeReg(0x7F, 0x09);
+//	PMW3901_writeReg(0x4F, 0xAF);
+//	PMW3901_writeReg(0x5F, 0x40);
+//	PMW3901_writeReg(0x48, 0x80);
+//	PMW3901_writeReg(0x49, 0x80);
+//	PMW3901_writeReg(0x57, 0x77);
+//	PMW3901_writeReg(0x60, 0x78);
+//	PMW3901_writeReg(0x61, 0x78);
+//	PMW3901_writeReg(0x62, 0x08);
+//	PMW3901_writeReg(0x63, 0x50);
+//	PMW3901_writeReg(0x7F, 0x0A);
+//	PMW3901_writeReg(0x45, 0x60);
+//	PMW3901_writeReg(0x7F, 0x00);
+//	PMW3901_writeReg(0x4D, 0x11);
+//	PMW3901_writeReg(0x55, 0x80);
+//	PMW3901_writeReg(0x74, 0x21);
+//	PMW3901_writeReg(0x75, 0x1F);
+//	PMW3901_writeReg(0x4A, 0x78);
+//	PMW3901_writeReg(0x4B, 0x78);
+//	PMW3901_writeReg(0x44, 0x08);
+//	PMW3901_writeReg(0x45, 0x50);
+//	PMW3901_writeReg(0x64, 0xFF);
+//	PMW3901_writeReg(0x65, 0x1F);
+//	PMW3901_writeReg(0x7F, 0x14);
+//	PMW3901_writeReg(0x65, 0x67);
+//	PMW3901_writeReg(0x66, 0x08);
+//	PMW3901_writeReg(0x63, 0x70);
+//	PMW3901_writeReg(0x7F, 0x15);
+//	PMW3901_writeReg(0x48, 0x48);
+//	PMW3901_writeReg(0x7F, 0x07);
+//	PMW3901_writeReg(0x41, 0x0D);
+//	PMW3901_writeReg(0x43, 0x14);
+//	PMW3901_writeReg(0x4B, 0x0E);
+//	PMW3901_writeReg(0x45, 0x0F);
+//	PMW3901_writeReg(0x44, 0x42);
+//	PMW3901_writeReg(0x4C, 0x80);
+//	PMW3901_writeReg(0x7F, 0x10);
+//	PMW3901_writeReg(0x5B, 0x02);
+//	PMW3901_writeReg(0x7F, 0x07);
+//	PMW3901_writeReg(0x40, 0x41);
+//	PMW3901_writeReg(0x70, 0x00);
+//
+//	HAL_Delay(10); // delay 10ms
+//
+//	PMW3901_writeReg(0x32, 0x44);
+//	PMW3901_writeReg(0x7F, 0x07);
+//	PMW3901_writeReg(0x40, 0x40);
+//	PMW3901_writeReg(0x7F, 0x06);
+//	PMW3901_writeReg(0x62, 0xF0);
+//	PMW3901_writeReg(0x63, 0x00);
+//	PMW3901_writeReg(0x7F, 0x0D);
+//	PMW3901_writeReg(0x48, 0xC0);
+//	PMW3901_writeReg(0x6F, 0xD5);
+//	PMW3901_writeReg(0x7F, 0x00);
+//	PMW3901_writeReg(0x5B, 0xA0);
+//	PMW3901_writeReg(0x4E, 0xA8);
+//	PMW3901_writeReg(0x5A, 0x50);
+//	PMW3901_writeReg(0x40, 0x80);
+//}
 
 void PMW3901_SetInterrupt()
 {
@@ -289,7 +289,7 @@ uint8_t PMW3901_ReadMotion()
 
 	for(int i = 0; i<6; i++)
 	{
-		rslt += PMW3901_readRegs(PWM_REG_MOTION, data[i], 1);
+		rslt += PMW3901_readRegs(PWM_REG_MOTION + i, data[i], 1);
 	}
 
 	if(rslt == 0)
@@ -378,85 +378,85 @@ uint8_t  PMW3901_ReadMotionBulk()
 
 
 
-//uint8_t PMW3901_WriteConfiguration()
-//{
-//	  PMW3901_writeReg(0x7F, 0x00);
-//	  PMW3901_writeReg(0x61, 0xAD);
-//	  PMW3901_writeReg(0x7F, 0x03);
-//	  PMW3901_writeReg(0x40, 0x00);
-//	  PMW3901_writeReg(0x7F, 0x05);
-//	  PMW3901_writeReg(0x41, 0xB3);
-//	  PMW3901_writeReg(0x43, 0xF1);
-//	  PMW3901_writeReg(0x45, 0x14);
-//	  PMW3901_writeReg(0x5B, 0x32);
-//	  PMW3901_writeReg(0x5F, 0x34);
-//	  PMW3901_writeReg(0x7B, 0x08);
-//	  PMW3901_writeReg(0x7F, 0x06);
-//	  PMW3901_writeReg(0x44, 0x1B);
-//	  PMW3901_writeReg(0x40, 0xBF);
-//	  PMW3901_writeReg(0x4E, 0x3F);
-//	  PMW3901_writeReg(0x7F, 0x08);
-//	  PMW3901_writeReg(0x65, 0x20);
-//	  PMW3901_writeReg(0x6A, 0x18);
-//	  PMW3901_writeReg(0x7F, 0x09);
-//	  PMW3901_writeReg(0x4F, 0xAF);
-//	  PMW3901_writeReg(0x5F, 0x40);
-//	  PMW3901_writeReg(0x48, 0x80);
-//	  PMW3901_writeReg(0x49, 0x80);
-//	  PMW3901_writeReg(0x57, 0x77);
-//	  PMW3901_writeReg(0x60, 0x78);
-//	  PMW3901_writeReg(0x61, 0x78);
-//	  PMW3901_writeReg(0x62, 0x08);
-//	  PMW3901_writeReg(0x63, 0x50);
-//	  PMW3901_writeReg(0x7F, 0x0A);
-//	  PMW3901_writeReg(0x45, 0x60);
-//	  PMW3901_writeReg(0x7F, 0x00);
-//	  PMW3901_writeReg(0x4D, 0x11);
-//	  PMW3901_writeReg(0x55, 0x80);
-//	  PMW3901_writeReg(0x74, 0x1F);
-//	  PMW3901_writeReg(0x75, 0x1F);
-//	  PMW3901_writeReg(0x4A, 0x78);
-//	  PMW3901_writeReg(0x4B, 0x78);
-//	  PMW3901_writeReg(0x44, 0x08);
-//	  PMW3901_writeReg(0x45, 0x50);
-//	  PMW3901_writeReg(0x64, 0xFF);
-//	  PMW3901_writeReg(0x65, 0x1F);
-//	  PMW3901_writeReg(0x7F, 0x14);
-//	  PMW3901_writeReg(0x65, 0x60);
-//	  PMW3901_writeReg(0x66, 0x08);
-//	  PMW3901_writeReg(0x63, 0x78);
-//	  PMW3901_writeReg(0x7F, 0x15);
-//	  PMW3901_writeReg(0x48, 0x58);
-//	  PMW3901_writeReg(0x7F, 0x07);
-//	  PMW3901_writeReg(0x41, 0x0D);
-//	  PMW3901_writeReg(0x43, 0x14);
-//	  PMW3901_writeReg(0x4B, 0x0E);
-//	  PMW3901_writeReg(0x45, 0x0F);
-//	  PMW3901_writeReg(0x44, 0x42);
-//	  PMW3901_writeReg(0x4C, 0x80);
-//	  PMW3901_writeReg(0x7F, 0x10);
-//	  PMW3901_writeReg(0x5B, 0x02);
-//	  PMW3901_writeReg(0x7F, 0x07);
-//	  PMW3901_writeReg(0x40, 0x41);
-//	  PMW3901_writeReg(0x70, 0x00);
-//
-//	  HAL_Delay(100);
-//	  PMW3901_writeReg(0x32, 0x44);
-//	  PMW3901_writeReg(0x7F, 0x07);
-//	  PMW3901_writeReg(0x40, 0x40);
-//	  PMW3901_writeReg(0x7F, 0x06);
-//	  PMW3901_writeReg(0x62, 0xf0);
-//	  PMW3901_writeReg(0x63, 0x00);
-//	  PMW3901_writeReg(0x7F, 0x0D);
-//	  PMW3901_writeReg(0x48, 0xC0);
-//	  PMW3901_writeReg(0x6F, 0xd5);
-//	  PMW3901_writeReg(0x7F, 0x00);
-//	  PMW3901_writeReg(0x5B, 0xa0);
-//	  PMW3901_writeReg(0x4E, 0xA8);
-//	  PMW3901_writeReg(0x5A, 0x50);
-//	  PMW3901_writeReg(0x40, 0x80);
-//
-//}
+uint8_t PMW3901_WriteConfiguration()
+{
+	  PMW3901_writeReg(0x7F, 0x00);
+	  PMW3901_writeReg(0x61, 0xAD);
+	  PMW3901_writeReg(0x7F, 0x03);
+	  PMW3901_writeReg(0x40, 0x00);
+	  PMW3901_writeReg(0x7F, 0x05);
+	  PMW3901_writeReg(0x41, 0xB3);
+	  PMW3901_writeReg(0x43, 0xF1);
+	  PMW3901_writeReg(0x45, 0x14);
+	  PMW3901_writeReg(0x5B, 0x32);
+	  PMW3901_writeReg(0x5F, 0x34);
+	  PMW3901_writeReg(0x7B, 0x08);
+	  PMW3901_writeReg(0x7F, 0x06);
+	  PMW3901_writeReg(0x44, 0x1B);
+	  PMW3901_writeReg(0x40, 0xBF);
+	  PMW3901_writeReg(0x4E, 0x3F);
+	  PMW3901_writeReg(0x7F, 0x08);
+	  PMW3901_writeReg(0x65, 0x20);
+	  PMW3901_writeReg(0x6A, 0x18);
+	  PMW3901_writeReg(0x7F, 0x09);
+	  PMW3901_writeReg(0x4F, 0xAF);
+	  PMW3901_writeReg(0x5F, 0x40);
+	  PMW3901_writeReg(0x48, 0x80);
+	  PMW3901_writeReg(0x49, 0x80);
+	  PMW3901_writeReg(0x57, 0x77);
+	  PMW3901_writeReg(0x60, 0x78);
+	  PMW3901_writeReg(0x61, 0x78);
+	  PMW3901_writeReg(0x62, 0x08);
+	  PMW3901_writeReg(0x63, 0x50);
+	  PMW3901_writeReg(0x7F, 0x0A);
+	  PMW3901_writeReg(0x45, 0x60);
+	  PMW3901_writeReg(0x7F, 0x00);
+	  PMW3901_writeReg(0x4D, 0x11);
+	  PMW3901_writeReg(0x55, 0x80);
+	  PMW3901_writeReg(0x74, 0x1F);
+	  PMW3901_writeReg(0x75, 0x1F);
+	  PMW3901_writeReg(0x4A, 0x78);
+	  PMW3901_writeReg(0x4B, 0x78);
+	  PMW3901_writeReg(0x44, 0x08);
+	  PMW3901_writeReg(0x45, 0x50);
+	  PMW3901_writeReg(0x64, 0xFF);
+	  PMW3901_writeReg(0x65, 0x1F);
+	  PMW3901_writeReg(0x7F, 0x14);
+	  PMW3901_writeReg(0x65, 0x60);
+	  PMW3901_writeReg(0x66, 0x08);
+	  PMW3901_writeReg(0x63, 0x78);
+	  PMW3901_writeReg(0x7F, 0x15);
+	  PMW3901_writeReg(0x48, 0x58);
+	  PMW3901_writeReg(0x7F, 0x07);
+	  PMW3901_writeReg(0x41, 0x0D);
+	  PMW3901_writeReg(0x43, 0x14);
+	  PMW3901_writeReg(0x4B, 0x0E);
+	  PMW3901_writeReg(0x45, 0x0F);
+	  PMW3901_writeReg(0x44, 0x42);
+	  PMW3901_writeReg(0x4C, 0x80);
+	  PMW3901_writeReg(0x7F, 0x10);
+	  PMW3901_writeReg(0x5B, 0x02);
+	  PMW3901_writeReg(0x7F, 0x07);
+	  PMW3901_writeReg(0x40, 0x41);
+	  PMW3901_writeReg(0x70, 0x00);
+
+	  HAL_Delay(100);
+	  PMW3901_writeReg(0x32, 0x44);
+	  PMW3901_writeReg(0x7F, 0x07);
+	  PMW3901_writeReg(0x40, 0x40);
+	  PMW3901_writeReg(0x7F, 0x06);
+	  PMW3901_writeReg(0x62, 0xf0);
+	  PMW3901_writeReg(0x63, 0x00);
+	  PMW3901_writeReg(0x7F, 0x0D);
+	  PMW3901_writeReg(0x48, 0xC0);
+	  PMW3901_writeReg(0x6F, 0xd5);
+	  PMW3901_writeReg(0x7F, 0x00);
+	  PMW3901_writeReg(0x5B, 0xa0);
+	  PMW3901_writeReg(0x4E, 0xA8);
+	  PMW3901_writeReg(0x5A, 0x50);
+	  PMW3901_writeReg(0x40, 0x80);
+
+}
 
 
 

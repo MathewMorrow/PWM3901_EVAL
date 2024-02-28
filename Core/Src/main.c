@@ -118,6 +118,10 @@ int main(void)
   /* USER CODE BEGIN 2 */
   microsInit(&htim5);
 
+  UART_Receive_IT_Enable(&huart2);
+
+  PMW3901_init(&hspi1, PIN_CS_GPIO_Port, PIN_CS_Pin, PIN_INTERRUPT_GPIO_Port, PIN_INTERRUPT_Pin);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -128,7 +132,7 @@ int main(void)
 	if(runPMW && PMW3901_IsDataReady())
 	{
 		PMW3901_ReadMotion();
-		PMW3901_ReadMotionBulk();
+//		PMW3901_ReadMotionBulk();
 	}
 
 	if(getRxCount(&huart2)) printCLI();
@@ -211,7 +215,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -358,21 +362,45 @@ void printCLI(void)
 	{
 		sprintf(sprintfBuffer,"\n\r"
 				"1 - Init\n\r"
+				"2 - Set motion\n\r"
 				"3 - Slow Read\n\r"
 				"4 - Bulk Read\n\r"
 				"5 - Stream\n\r"
 				"9 - Power On Reset\n\r"
 				);
-		HAL_UART_Transmit_IT(&huart2, sprintfBuffer, strlen(sprintfBuffer));
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
 	else if(read_Value == '1')
 	{
-		PMW3901_ReadMotion();
+		uint8_t rslt = PMW3901_init(&hspi1, PIN_CS_GPIO_Port, PIN_CS_Pin, PIN_INTERRUPT_GPIO_Port, PIN_INTERRUPT_Pin);
+		if(rslt)
+		{
+			sprintf(sprintfBuffer,"Init FAILED\n\r");
+		}
+		else
+		{
+			sprintf(sprintfBuffer,"Init SUCCESS\n\r");
+		}
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
+	}
+	else if(read_Value == '2')
+	{
+		uint8_t rslt = PMW3901_writeReg(PWM_REG_MOTION, 0x011);
+		if(rslt)
+		{
+			sprintf(sprintfBuffer,"Write FAILED\n\r");
+		}
+		else
+		{
+			sprintf(sprintfBuffer,"Write SUCCESS\n\r");
+		}
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
 	else if(read_Value == '3')
 	{
-		PMW3901_init(&hspi1, PIN_CS_GPIO_Port, PIN_CS_Pin, PIN_INTERRUPT_GPIO_Port, PIN_INTERRUPT_Pin);
-		sprintf("\n\r"
+		PMW3901_ReadMotion();
+		sprintf(sprintfBuffer,
+				"\n\r"
 				"Motion: "BYTE_TO_BINARY_PATTERN "\n\r"
 				"deltax: \n\r"
 				"deltay: \n\r"
@@ -380,12 +408,16 @@ void printCLI(void)
 				,BYTE_TO_BINARY(pmw3901.motion)
 				, pmw3901.deltaX
 				, pmw3901.deltaY
-				, pmw3901.squal);
+				, pmw3901.squal
+				);
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
 	else if(read_Value == '4')
 	{
+		PMW3901_ReadMotionBulk();
 		PMW3901_init(&hspi1, PIN_CS_GPIO_Port, PIN_CS_Pin, PIN_INTERRUPT_GPIO_Port, PIN_INTERRUPT_Pin);
-		sprintf("\n\r"
+		sprintf(sprintfBuffer,
+				"\n\r"
 				"Valid: \n\r"
 				"deltax: \n\r"
 				"deltay: \n\r"
@@ -406,6 +438,7 @@ void printCLI(void)
 				,pmw3901.shutter
 				,pmw3901.squal
 				);
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
 	else if (read_Value = '5')
 	{
@@ -419,7 +452,7 @@ void printCLI(void)
 	else
 	{
 		sprintf(sprintfBuffer, "Invalid Command\n\r");
-		HAL_UART_Transmit_IT(&huart2, sprintfBuffer, strlen(sprintfBuffer));
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
 
 	printf("END\n\r");
@@ -434,7 +467,7 @@ void streamData()
 		{
 			lastMillis = HAL_GetTick();
 			sprintf(sprintfBuffer, "%i %i %i\n\r", pmw3901.deltaX, pmw3901.deltaY, pmw3901.squal);
-			HAL_UART_Transmit_IT(&huart2, sprintfBuffer, strlen(sprintfBuffer));
+			HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 		}
 	}
 }
