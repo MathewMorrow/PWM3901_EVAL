@@ -35,6 +35,8 @@
 
 #define PMW_CHIP_ID 0x49
 
+extern uint8_t pmw3901Rev;
+
 /* Structure to hold register data */
 typedef struct PMW3901_s{
 
@@ -99,7 +101,7 @@ uint8_t PMW3901_PowerOnReset();
 
 uint8_t PMW3901_WriteConfiguration();
 
-void PMW3901_SetInterrupt();
+uint8_t  PMW3901_SetInterrupt();
 
 uint8_t PMW3901_IsDataReady();
 

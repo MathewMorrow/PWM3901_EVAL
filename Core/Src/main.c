@@ -64,6 +64,8 @@ UART_HandleTypeDef huart2;
 uint8_t sprintfBuffer[512] = {'\0'};
 uint8_t runPMW = 0;
 uint8_t streamPMW = 0;
+static uint32_t lastMicros = 0;
+uint8_t data[2] = {0};
 
 /* USER CODE END PV */
 
@@ -120,8 +122,12 @@ int main(void)
 
   UART_Receive_IT_Enable(&huart2);
 
-  PMW3901_init(&hspi1, PIN_CS_GPIO_Port, PIN_CS_Pin, PIN_INTERRUPT_GPIO_Port, PIN_INTERRUPT_Pin);
-
+  uint8_t error = 0;
+  error = PMW3901_init(&hspi1, PIN_CS_GPIO_Port, PIN_CS_Pin, PIN_INTERRUPT_GPIO_Port, PIN_INTERRUPT_Pin);
+if(error)
+{
+	while(1);
+}
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -129,10 +135,16 @@ int main(void)
   while (1)
   {
 
-	if(runPMW && PMW3901_IsDataReady())
+	if(runPMW && !PMW3901_IsDataReady())
 	{
-		PMW3901_ReadMotion();
-//		PMW3901_ReadMotionBulk();
+//		PMW3901_ReadMotion();
+		PMW3901_ReadMotionBulk();
+	}
+
+	if(lastMicros - getMicros() >= 100)
+	{
+		lastMicros = getMicros();
+		HAL_GPIO_TogglePin(pinTest_GPIO_Port, pinTest_Pin);
 	}
 
 	if(getRxCount(&huart2)) printCLI();
@@ -249,7 +261,7 @@ static void MX_TIM5_Init(void)
 
   /* USER CODE END TIM5_Init 1 */
   htim5.Instance = TIM5;
-  htim5.Init.Prescaler = 84-1;
+  htim5.Init.Prescaler = 8400;
   htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim5.Init.Period = 4294967295;
   htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -326,6 +338,9 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(pinTest_GPIO_Port, pinTest_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(PIN_CS_GPIO_Port, PIN_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
@@ -333,6 +348,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : pinTest_Pin */
+  GPIO_InitStruct.Pin = pinTest_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(pinTest_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PIN_INTERRUPT_Pin */
   GPIO_InitStruct.Pin = PIN_INTERRUPT_Pin;
@@ -366,7 +388,11 @@ void printCLI(void)
 				"3 - Slow Read\n\r"
 				"4 - Bulk Read\n\r"
 				"5 - Stream\n\r"
+				"7 - Read Rev\n\r"
+				"8 - Read Motion\n\r"
 				"9 - Power On Reset\n\r"
+				"x - Read Xl\n\r"
+				"b - Read motion_bulk\n\r"
 				);
 		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
@@ -385,7 +411,7 @@ void printCLI(void)
 	}
 	else if(read_Value == '2')
 	{
-		uint8_t rslt = PMW3901_writeReg(PWM_REG_MOTION, 0x011);
+		uint8_t rslt = PMW3901_writeReg(PWM_REG_MOTION, 0x01);
 		if(rslt)
 		{
 			sprintf(sprintfBuffer,"Write FAILED\n\r");
@@ -398,54 +424,170 @@ void printCLI(void)
 	}
 	else if(read_Value == '3')
 	{
-		PMW3901_ReadMotion();
-		sprintf(sprintfBuffer,
-				"\n\r"
-				"Motion: "BYTE_TO_BINARY_PATTERN "\n\r"
-				"deltax: \n\r"
-				"deltay: \n\r"
-				"Squal: \n\r"
-				,BYTE_TO_BINARY(pmw3901.motion)
-				, pmw3901.deltaX
-				, pmw3901.deltaY
-				, pmw3901.squal
-				);
+		uint8_t error = 0;
+		error = PMW3901_ReadMotion();
+		if(error)
+		{
+			sprintf(sprintfBuffer,"Slow read failed");
+		}
+		else
+		{
+			sprintf(sprintfBuffer,
+					"\n\r"
+					"Motion: "BYTE_TO_BINARY_PATTERN "\n\r"
+					"deltax: %i\n\r"
+					"deltay: %i\n\r"
+					"Squal: %i\n\r"
+					,BYTE_TO_BINARY(pmw3901.motion)
+					, pmw3901.deltaX
+					, pmw3901.deltaY
+					, pmw3901.squal
+			);
+		}
 		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
 	else if(read_Value == '4')
 	{
-		PMW3901_ReadMotionBulk();
-		PMW3901_init(&hspi1, PIN_CS_GPIO_Port, PIN_CS_Pin, PIN_INTERRUPT_GPIO_Port, PIN_INTERRUPT_Pin);
-		sprintf(sprintfBuffer,
-				"\n\r"
-				"Valid: \n\r"
-				"deltax: \n\r"
-				"deltay: \n\r"
-				"Squal: \n\r"
-				"Observ: \n\r"
-				"Rawavg: \n\r"
-				"RawMx: \n\r"
-				"RawMn: \n\r"
-				"Shutter: \n\r"
-				,pmw3901.isValid
-				, pmw3901.deltaX
-				, pmw3901.deltaY
-				, pmw3901.squal
-				,pmw3901.observation
-				,pmw3901.rawAverage
-				,pmw3901.rawMax
-				,pmw3901.rawMin
-				,pmw3901.shutter
-				,pmw3901.squal
-				);
+		uint8_t error = 0;
+		error = PMW3901_ReadMotionBulk();
+		if(error)
+		{
+			sprintf(sprintfBuffer,"Bulk read fail");
+		}
+		else
+		{
+			sprintf(sprintfBuffer,
+					"\n\r"
+					"Valid: %i\n\r"
+					"deltax: %i\n\r"
+					"deltay: %i\n\r"
+					"Squal: %i\n\r"
+					"Observ: %i\n\r"
+					"Rawavg: %i\n\r"
+					"RawMx: %i\n\r"
+					"RawMn: %i\n\r"
+					"Shutter: %i\n\r"
+					,pmw3901.isValid
+					, pmw3901.deltaX
+					, pmw3901.deltaY
+					, pmw3901.squal
+					,pmw3901.observation
+					,pmw3901.rawAverage
+					,pmw3901.rawMax
+					,pmw3901.rawMin
+					,pmw3901.shutter
+					,pmw3901.squal
+					);
+		}
 		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
-	else if (read_Value = '5')
+	else if (read_Value == '5')
 	{
-		uint8_t runPMW = 1;
-		uint8_t streamPMW = 1;
+		if(streamPMW)
+		{
+			runPMW = 0;
+			streamPMW = 0;
+		}
+		else
+		{
+			runPMW = 1;
+			streamPMW = 1;
+		}
+		sprintf(sprintfBuffer,"Stream %i\n\r", runPMW);
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
+
 	}
-	else if(read_Value = '9')
+	else if(read_Value == '7')
+	{
+		uint8_t error = 0;
+		uint8_t rev = 0;
+		error = PMW3901_readRegs(0x01, &rev, 1);
+		if(error)
+		{
+			sprintf(sprintfBuffer,"Read rev failed");
+		}
+		else
+		{
+			sprintf(sprintfBuffer,"Rev %i\n\r", rev);
+		}
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
+	}
+	else if(read_Value == '8')
+	{
+		uint8_t error = 0;
+		uint8_t motionVal = 0;
+		error = PMW3901_readRegs(0x02, &motionVal, 1);
+		if(error)
+		{
+			sprintf(sprintfBuffer,"Read motion failed");
+		}
+		else
+		{
+			sprintf(sprintfBuffer,"Motion %i\n\r", motionVal);
+		}
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
+	}
+	else if(read_Value == 'x')
+	{
+		uint8_t error = 0;
+		uint8_t motionXl = 0;
+		error = PMW3901_readRegs(PMW_REG_DELTA_X_L, &motionXl, 1);
+		if(error)
+		{
+			sprintf(sprintfBuffer,"Read XL failed");
+		}
+		else
+		{
+			sprintf(sprintfBuffer,"Xl %i\n\r", motionXl);
+		}
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
+	}
+	else if(read_Value == 'b')
+	{
+		uint8_t error = 0;
+		uint8_t motionBulkVal = 0;
+		error = PMW3901_readRegs(PMW_REG_MOTION_BURST, &motionBulkVal, 1);
+		if(error)
+		{
+			sprintf(sprintfBuffer,"Read motion_bulk failed");
+		}
+		else
+		{
+			sprintf(sprintfBuffer,"Motion_Bulk %i\n\r", motionBulkVal);
+		}
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
+	}
+	else if(read_Value == 'n')
+	{
+		uint8_t error = 0;
+		uint8_t motionBulkXl = 0;
+		error = PMW3901_readRegs(PMW_REG_MOTION_BURST + 0x01, &motionBulkXl, 1);
+		if(error)
+		{
+			sprintf(sprintfBuffer,"Read bulk Xl failed");
+		}
+		else
+		{
+			sprintf(sprintfBuffer,"Bulk Xl %i\n\r", motionBulkXl);
+		}
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
+	}
+	else if(read_Value == 'q')
+	{
+		uint8_t error = 0;
+//		uint8_t data[2] = {0};
+		error = PMW3901_readRegs(0x00, &data[0], 2);
+		if(error)
+		{
+			sprintf(sprintfBuffer,"Read bulk Xl failed\n\r%i\n\rXl %i\n\r", data[0], data[1]);
+		}
+		else
+		{
+			sprintf(sprintfBuffer,"Bulk %i\n\rXl %i\n\r", data[0], data[1]);
+		}
+		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
+	}
+	else if(read_Value == '9')
 	{
 		PMW3901_PowerOnReset();
 	}
@@ -454,8 +596,6 @@ void printCLI(void)
 		sprintf(sprintfBuffer, "Invalid Command\n\r");
 		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
-
-	printf("END\n\r");
 }
 
 void streamData()
