@@ -52,10 +52,14 @@ typedef struct PMW3901_s{
 	uint16_t shutter;
 
 	uint8_t isValid;
+	uint32_t deltaMicros;
 	float xDisplacement;
 	float yDisplacement;
+	float xDisplacementSum;
+	float yDisplacementSum;
 	float xVelocity;
 	float yVelocity;
+
 
 } PMW3901_t;
 
@@ -94,8 +98,9 @@ uint8_t PMW3901_writeReg(uint8_t reg, uint8_t value);
 
 uint8_t PMW3901_writeMultiple(uint8_t reg, uint8_t *data, uint16_t len);
 
-
 uint8_t PMW3901_init(SPI_HandleTypeDef *spi_handle, GPIO_TypeDef *CS_GPIO_Port, uint16_t CS_Pin, GPIO_TypeDef *INT_GPIO_Port, uint16_t INT_Pin);
+
+uint8_t PMW3901_Process();
 
 uint8_t PMW3901_PowerOnReset();
 

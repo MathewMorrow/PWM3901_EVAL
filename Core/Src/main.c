@@ -65,7 +65,6 @@ uint8_t sprintfBuffer[512] = {'\0'};
 uint8_t runPMW = 0;
 uint8_t streamPMW = 0;
 static uint32_t lastMicros = 0;
-uint8_t data[2] = {0};
 
 /* USER CODE END PV */
 
@@ -135,10 +134,14 @@ if(error)
   while (1)
   {
 
-	if(runPMW && !PMW3901_IsDataReady())
+	if(runPMW)
 	{
 //		PMW3901_ReadMotion();
-		PMW3901_ReadMotionBulk();
+//		PMW3901_ReadMotionBulk();
+		if(PMW3901_Process() == 0)
+		{
+			streamData();
+		}
 	}
 
 	if(lastMicros - getMicros() >= 100)
@@ -148,7 +151,7 @@ if(error)
 	}
 
 	if(getRxCount(&huart2)) printCLI();
-	streamData();
+//	streamData();
 
     /* USER CODE END WHILE */
 
@@ -261,7 +264,7 @@ static void MX_TIM5_Init(void)
 
   /* USER CODE END TIM5_Init 1 */
   htim5.Instance = TIM5;
-  htim5.Init.Prescaler = 8400;
+  htim5.Init.Prescaler = 83;
   htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim5.Init.Period = 4294967295;
   htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -393,6 +396,7 @@ void printCLI(void)
 				"9 - Power On Reset\n\r"
 				"x - Read Xl\n\r"
 				"b - Read motion_bulk\n\r"
+				"r - Reset sum\n\r"
 				);
 		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 	}
@@ -575,7 +579,7 @@ void printCLI(void)
 	else if(read_Value == 'q')
 	{
 		uint8_t error = 0;
-//		uint8_t data[2] = {0};
+		uint8_t data[2] = {0};
 		error = PMW3901_readRegs(0x00, &data[0], 2);
 		if(error)
 		{
@@ -586,6 +590,11 @@ void printCLI(void)
 			sprintf(sprintfBuffer,"Bulk %i\n\rXl %i\n\r", data[0], data[1]);
 		}
 		HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
+	}
+	else if(read_Value == 'r')
+	{
+		pmw3901.xDisplacementSum = 0;
+		pmw3901.yDisplacementSum = 0;
 	}
 	else if(read_Value == '9')
 	{
@@ -606,7 +615,9 @@ void streamData()
 		if(HAL_GetTick() - lastMillis >= 5)
 		{
 			lastMillis = HAL_GetTick();
-			sprintf(sprintfBuffer, "%i %i %i\n\r", pmw3901.deltaX, pmw3901.deltaY, pmw3901.squal);
+//			sprintf(sprintfBuffer, "%i %i %i %i\n", pmw3901.deltaX, pmw3901.deltaY, pmw3901.squal, pmw3901.deltaMicros);
+//			sprintf(sprintfBuffer, "%f %f\n", pmw3901.xDisplacementSum, pmw3901.yDisplacementSum);
+			sprintf(sprintfBuffer, "%f %f\n", pmw3901.xVelocity, pmw3901.yVelocity);
 			HAL_UART_Transmit(&huart2, sprintfBuffer, strlen(sprintfBuffer), 1000);
 		}
 	}

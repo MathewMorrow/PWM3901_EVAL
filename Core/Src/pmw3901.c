@@ -13,6 +13,7 @@
 #include "stm32f4xx_hal.h"
 #include "stdint.h"
 #include "micros.h"
+#include "IIR.h"
 
 /* SPI Peripherals */
 SPI_HandleTypeDef *spi_pmw;
@@ -31,6 +32,9 @@ uint8_t NOP_MASK = 0x00;
 
 PMW3901_t pmw3901 = {0};
 uint8_t pmw3901Rev = 256;
+
+pt2Filter_t xSpeedFilter;
+pt2Filter_t ySpeedFilter;
 
 
 uint8_t PMW3901_readRegs(uint8_t reg, uint32_t *data, uint16_t len)
@@ -157,10 +161,13 @@ uint8_t PMW3901_init(SPI_HandleTypeDef *spi_handle, GPIO_TypeDef *CS_GPIO_Port, 
 	HAL_Error = PMW3901_WriteConfiguration();
 	if(HAL_Error) return HAL_Error;
 
-
-
 	HAL_Error = PMW3901_SetInterrupt();
 	if(HAL_Error) return HAL_Error;
+
+	  /* Initialize Filters */
+	  float filterGain = pt2FilterGain(5.0f, 0.01f);
+	  pt2FilterInit(&xSpeedFilter,filterGain);
+	  pt2FilterInit(&ySpeedFilter,filterGain);
 
 	return 0;
 }
@@ -168,6 +175,120 @@ uint8_t PMW3901_init(SPI_HandleTypeDef *spi_handle, GPIO_TypeDef *CS_GPIO_Port, 
 uint8_t PMW3901_PowerOnReset()
 {
 	return PMW3901_writeReg(0x3A, 0x5A);
+}
+
+uint8_t PMW3901_Process()
+{
+	uint8_t rslt = 1;
+	static uint32_t lastMicros = 0;
+
+	uint32_t deltaMicros = getMicros() - lastMicros;
+
+	if(deltaMicros >= 10000)
+	{
+		PMW3901_ReadMotionBulk();
+
+		if(pmw3901.isValid)
+		{
+			pmw3901.isValid = 0;
+
+			lastMicros = getMicros();
+
+			pmw3901.deltaMicros = deltaMicros;
+
+			pmw3901.xDisplacement = (float)pmw3901.deltaX * 0.025 * 1.0f;
+			pmw3901.yDisplacement = (float)pmw3901.deltaY * 0.025 * 1.0f;;
+
+			pmw3901.xDisplacementSum += pmw3901.xDisplacement;
+			pmw3901.yDisplacementSum += pmw3901.yDisplacement;
+
+			float xVeloticty = (float)pmw3901.xDisplacement / 0.01;
+			float yVeloticty = (float)pmw3901.yDisplacement / 0.01;
+
+			pmw3901.xVelocity = pt2FilterApply(&xSpeedFilter, xVeloticty);
+			pmw3901.yVelocity = pt2FilterApply(&ySpeedFilter, yVeloticty);
+
+			rslt = 0;
+		}
+	}
+	return rslt;
+}
+
+uint8_t  PMW3901_SetInterrupt()
+{
+	/* Set the motion reg (0x02) to 0x01 to enable interrupt? */
+//	return PMW3901_writeReg(0x3F, 0x10);
+
+	/* Set MOTION_CONTROL reg (0x0F) to configure pin polarity? */
+	/* ChatGPT says Bit-2 to 0 for active high, bit-1 to 0 for clear on read of MOTION reg */
+	/* All other regs are reserved */
+	PMW3901_writeReg(0x3F, 0b11);
+}
+
+uint8_t PMW3901_IsDataReady()
+{
+	return HAL_GPIO_ReadPin(int_port_pmw, int_pin_pmw);
+}
+
+
+uint8_t PMW3901_ReadMotion()
+{
+	uint8_t rslt = 0;
+	uint8_t data[6] = {0};
+
+	for(int i = 0; i<6; i++)
+	{
+		rslt += PMW3901_readRegs(PWM_REG_MOTION + i, &data[i], 1);
+	}
+
+	if(rslt == 0)
+	{
+		pmw3901.motion = data[0];
+		pmw3901.deltaX = ((int16_t)data[2] << 8) | data[1];
+		pmw3901.deltaY = ((int16_t)data[4] << 8) | data[3];
+		pmw3901.squal = data[5];
+	}
+
+	return rslt;
+}
+
+
+uint8_t PMW3901_ReadMotionBulk()
+{
+	uint8_t rslt = 0;
+	uint8_t data[12] = {0};
+
+	rslt = PMW3901_readRegs(PMW_REG_MOTION_BURST, &data[0], 12);
+
+	if(rslt == 0)
+	{
+		if(data[0] && (1 << 7))
+		{
+//			if( (data[6] < 0x19) || (data[10] == 0x1F) )
+//			{
+//				pmw3901.isValid = 0;
+//			}
+//			else
+//			{
+				pmw3901.isValid = 1;
+				pmw3901.deltaX = (int16_t)(((uint16_t)data[3] << 8) | data[2]);                /* set delta_x */
+				pmw3901.deltaY = (int16_t)(((uint16_t)data[5] << 8) | data[4]);                /* set delta_y */
+				pmw3901.observation = data[1] & 0x3F;                                                  /* set observation */
+				pmw3901.rawAverage = data[7];                                                         /* set raw average */
+				pmw3901.rawMax = data[8];                                                             /* set raw max */
+				pmw3901.rawMin = data[9];                                                             /* set raw min */
+				pmw3901.shutter = (((((uint16_t)data[10] & 0x1F) << 8)) | data[11]);            /* set shutter */
+//				pmw3901.squal = data[6] * 4;
+				pmw3901.squal = data[6];
+//			}
+		}
+	}
+	else
+	{
+		pmw3901.isValid = 0;
+	}
+
+	return rslt;
 }
 
 //uint8_t PMW3901_WriteConfiguration()
@@ -304,89 +425,6 @@ uint8_t PMW3901_PowerOnReset()
 //	PMW3901_writeReg(0x5A, 0x50);
 //	PMW3901_writeReg(0x40, 0x80);
 //}
-
-uint8_t  PMW3901_SetInterrupt()
-{
-	/* Set the motion reg (0x02) to 0x01 to enable interrupt? */
-//	return PMW3901_writeReg(0x3F, 0x10);
-
-	/* Set MOTION_CONTROL reg (0x0F) to configure pin polarity? */
-	/* ChatGPT says Bit-2 to 0 for active high, bit-1 to 0 for clear on read of MOTION reg */
-	/* All other regs are reserved */
-	PMW3901_writeReg(0x3F, 0b11);
-}
-
-uint8_t PMW3901_IsDataReady()
-{
-	return HAL_GPIO_ReadPin(int_port_pmw, int_pin_pmw);
-}
-
-
-uint8_t PMW3901_ReadMotion()
-{
-	uint8_t rslt = 0;
-	uint8_t data[6] = {0};
-
-	for(int i = 0; i<6; i++)
-	{
-		rslt += PMW3901_readRegs(PWM_REG_MOTION + i, &data[i], 1);
-	}
-
-	if(rslt == 0)
-	{
-		pmw3901.motion = data[0];
-		pmw3901.deltaX = ((int16_t)data[2] << 8) | data[1];
-		pmw3901.deltaY = ((int16_t)data[4] << 8) | data[3];
-		pmw3901.squal = data[5];
-	}
-
-	return rslt;
-}
-
-
-uint8_t  PMW3901_ReadMotionBulk()
-{
-	uint8_t rslt = 0;
-	uint8_t data[12] = {0};
-
-	rslt = PMW3901_readRegs(PMW_REG_MOTION_BURST, &data[0], 12);
-
-	if(rslt == 0)
-	{
-		if(data[0] && (1 << 7))
-		{
-//			if( (data[6] < 0x19) || (data[10] == 0x1F) )
-//			{
-//				pmw3901.isValid = 0;
-//			}
-//			else
-//			{
-				pmw3901.isValid = 1;
-				pmw3901.deltaX = (int16_t)(((uint16_t)data[3] << 8) | data[2]);                /* set delta_x */
-				pmw3901.deltaY = (int16_t)(((uint16_t)data[5] << 8) | data[4]);                /* set delta_y */
-				pmw3901.observation = data[1] & 0x3F;                                                  /* set observation */
-				pmw3901.rawAverage = data[7];                                                         /* set raw average */
-				pmw3901.rawMax = data[8];                                                             /* set raw max */
-				pmw3901.rawMin = data[9];                                                             /* set raw min */
-				pmw3901.shutter = (((((uint16_t)data[10] & 0x1F) << 8)) | data[11]);            /* set shutter */
-//				pmw3901.squal = data[6] * 4;
-				pmw3901.squal = data[6];
-//			}
-		}
-	}
-	else
-	{
-		pmw3901.isValid = 0;
-	}
-
-	return rslt;
-}
-
-
-
-
-
-
 
 uint8_t PMW3901_WriteConfiguration()
 {
