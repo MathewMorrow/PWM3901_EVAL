@@ -19,8 +19,8 @@
 typedef struct nspFrameDef_s
 {
     uint8_t deviceAddress;
-    uint8_t rxFrametype;
-    uint8_t rxFrameLength;
+    uint8_t frametype;
+    uint8_t frameLength;
     uint8_t payload[NSP_MAX_PAYLOAD_SIZE];
     uint8_t crc;
 } nspFrameDef_t;

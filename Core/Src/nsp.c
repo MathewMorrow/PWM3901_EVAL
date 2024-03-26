@@ -60,7 +60,6 @@ uint8_t nspInit(UART_HandleTypeDef *huart, uint8_t deviceAddress)
 }
 
 
-
 void nspDataReceive(uint8_t newByte)
 {
     static uint8_t nspFrameRxPosition = 0;
@@ -77,15 +76,16 @@ void nspDataReceive(uint8_t newByte)
 
     // const int fullFrameLength = nspFrameRxPosition < 4 ? 5 : MIN(nspFrame.rxFrameLength + NSP_HEADER_CRC_SIZE, NSP_MAX_MESSAGE_SIZE);
 
-    nspRxFrame.rxFrameLength = nspFrameRxPosition < 4 ? 5 : MIN(nspRxFrame.rxFrameLength + NSP_HEADER_CRC_SIZE, NSP_MAX_MESSAGE_SIZE);
+    // <Device address><Type><Frame length><Payload><CRC>
+    uint8_t rxFullFrameLength = nspFrameRxPosition < 2 ? 5 : MIN(nspRxFrame.frame.frameLength + NSP_HEADER_CRC_SIZE, NSP_MAX_MESSAGE_SIZE);
 
-    if (nspFrameRxPosition < fullFrameLength)
+    if (nspFrameRxPosition < rxFullFrameLength)
     {
-    	nspRxFrame.rxBuffer[nspFrameRxPosition++] = newByte;
+    	nspRxFrame.bytes[nspFrameRxPosition++] = newByte;
         if (nspFrameRxPosition >= fullFrameLength)
         {
             nspFrameRxPosition = 0;
-            const uint8_t crc = crsfFrameCRC();
+            const uint8_t crc = nspRxFrameCRC();
             if (crc == crsfFrame.bytes[fullFrameLength - 1])
             {
                 switch (crsfFrame.frame.type)
@@ -124,16 +124,17 @@ void nspDataReceive(uint8_t newByte)
 
 uint8_t nspRxFrameCRC(void)
 {
+	uint8_t crc = 0;
 	/* CRC includes address, frame type and payload */
-    for (int ii = 0; ii < crsfFrame.frame.frameLength - CRSF_FRAME_LENGTH_TYPE_CRC; ++ii) {
-        crc = crc8_dvb_s2(crc, crsfFrame.frame.payload[ii]);
+    for (int ii = 0; ii < NSP_HEADER_SIZE + nspRxFrame.frame.frameLength; ii++) {
+        crc = crc8_dvb_s2(crc, crsfFrame.bytes[ii]);
     }
     return crc;
 }
 
 
 
-void nspTransmit(uint8_t messageType, uint8_t numDataBytes, uint8_t *data)
+uint8_t  nspTransmit(uint8_t messageType, uint8_t numDataBytes, uint8_t *data)
 {
 	/* <Device address><Type><Frame length><Payload><CRC> */
 
@@ -150,12 +151,12 @@ void nspTransmit(uint8_t messageType, uint8_t numDataBytes, uint8_t *data)
 
 	HAL_UART_Transmit_IT(uart, nspRxFrame.txBuffer, NSP_HEADER_CRC_SIZE + numDataBytes);
 
+	return 0;
 }
 
 uint8_t nspTxCRC(uint8_t *data, uint8_t len)
 {
-    // CRC includes type and payload
-    uint8_t crc = 0;
+	uint8_t crc = 0;
     for (int k = 0; k < len; k++)
     {
         crc = crc8_dvb_s2(crc, data[k]);
